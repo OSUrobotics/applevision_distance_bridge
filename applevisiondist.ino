@@ -3,14 +3,16 @@
  * Prints "hello world!"
  */
 
+#include <limits>
 #include <ros.h>
-#include <std_msgs/UInt16.h>
+#include <sensor_msgs/Range.h>
 #include <Wire.h>
 #include "src/Adafruit_VL53L0X/Adafruit_VL53L0X.h"
 
 ros::NodeHandle  nh;
-std_msgs::UInt16 num_msg;
-ros::Publisher dist("appl_dist", &num_msg);
+sensor_msgs::Range range_msg;
+uint32_t cur_seq = 0;
+ros::Publisher dist("applevision/apple_dist", &range_msg);
 Adafruit_VL53L0X lidar;
 
 // for debugging, not used
@@ -32,6 +34,12 @@ void error(const char* str) {
 
 void setup()
 {
+  range_msg.header.frame_id = "g";
+  range_msg.radiation_type = sensor_msgs::Range::INFRARED;
+  range_msg.field_of_view = 20.0f/180.0f*M_PI;
+  range_msg.min_range = 0.0f;
+  range_msg.max_range = 2000.0f;
+
   // TODO: watchdog
   nh.initNode();
   while (!nh.connected())
@@ -48,6 +56,7 @@ void setup()
 
   nh.advertise(dist);
   nh.negotiateTopics();
+  nh.now();
 
   if (VL53L0X_StartMeasurement(lidar.pMyDevice) != 0)
     error("LIDAR: failed to start the first measurement");
@@ -57,15 +66,38 @@ void loop()
 {
   auto start = millis();
   while (!lidar.isRangeComplete()) {
-    if (millis() - start > 1000)
-      error("LIDAR: Timed out waiting for the VL53L0X to finish measuring");
+    if (millis() - start > 1000) {
+      nh.logwarn("LIDAR: Timed out waiting for the VL53L0X to finish measuring");
+      return;
+    }
+  }
+  auto stamp = nh.now();
+
+  VL53L0X_RangingMeasurementData_t measure; // keep our own private copy
+  auto status = VL53L0X_GetRangingMeasurementData(lidar.pMyDevice, &measure);
+  auto range_status = measure.RangeStatus;
+  if (status == VL53L0X_ERROR_NONE)
+    status = VL53L0X_ClearInterruptMask(lidar.pMyDevice, 0);
+  if ((status != VL53L0X_ERROR_NONE) || (range_status != 0 && range_status != 2 && range_status != 4)) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "LIDAR: range read failed with status %d and range status %d", status, range_status);
+    nh.logwarn(buf);
+    return;
   }
 
-  uint16_t dist_num = lidar.readRangeResult();
-  if (dist_num == 0xffff)
-    error("LIDAR: Failed to read range result from VL53L0X");
+  if (range_status == 2)
+    nh.logwarn("LIDAR: sensor reported low signal quality");
+  if (range_status == 4)
+    nh.logwarn("LIDAR: sensor reported phase aliasing (more than one object?)");
 
-  num_msg.data = dist_num;
-  dist.publish( &num_msg );
+  range_msg.header.stamp = stamp;
+  range_msg.header.seq = cur_seq;
+  range_msg.range = (float)measure.RangeMilliMeter;
+  dist.publish( &range_msg );
   nh.spinOnce();
+
+  if (cur_seq == std::numeric_limits<uint32_t>::max())
+    cur_seq = 0;
+  else
+    cur_seq++;
 }

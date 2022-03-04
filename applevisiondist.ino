@@ -38,7 +38,7 @@ void setup()
   range_msg.radiation_type = sensor_msgs::Range::INFRARED;
   range_msg.field_of_view = 20.0f/180.0f*M_PI;
   range_msg.min_range = 0.0f;
-  range_msg.max_range = 2000.0f;
+  range_msg.max_range = 2.0f;
 
   // TODO: watchdog
   nh.initNode();
@@ -92,7 +92,7 @@ void loop()
 
   range_msg.header.stamp = stamp;
   range_msg.header.seq = cur_seq;
-  range_msg.range = (float)measure.RangeMilliMeter;
+  range_msg.range = (float)measure.RangeMilliMeter / 1000.0f;
   dist.publish( &range_msg );
   nh.spinOnce();
 

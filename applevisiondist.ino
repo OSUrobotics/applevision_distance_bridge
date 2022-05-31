@@ -34,9 +34,9 @@ void error(const char* str) {
 
 void setup()
 {
-  range_msg.header.frame_id = "g";
+  range_msg.header.frame_id = "palm_dist";
   range_msg.radiation_type = sensor_msgs::Range::INFRARED;
-  range_msg.field_of_view = 20.0f/180.0f*M_PI;
+  range_msg.field_of_view = 25.0f/180.0f*M_PI;
   range_msg.min_range = 0.0f;
   range_msg.max_range = 2.0f;
 
@@ -51,7 +51,7 @@ void setup()
   if (VL53L0X_SetDeviceMode(lidar.pMyDevice, VL53L0X_DEVICEMODE_CONTINUOUS_RANGING) != 0)
     error("LIDAR: failed to set the VL53L0X in continuous mode");
 
-  if (VL53L0X_SetMeasurementTimingBudgetMicroSeconds(lidar.pMyDevice, 33333) != 0)
+  if (VL53L0X_SetMeasurementTimingBudgetMicroSeconds(lidar.pMyDevice, 100000) != 0)
     error("LIDAR: failed to set the timing budget for the VL53L0X");
 
   nh.advertise(dist);
